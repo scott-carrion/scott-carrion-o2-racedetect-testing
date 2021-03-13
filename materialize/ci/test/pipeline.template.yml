@@ -1,0 +1,279 @@
+# Copyright Materialize, Inc. All rights reserved.
+#
+# Use of this software is governed by the Business Source License
+# included in the LICENSE file at the root of this repository.
+#
+# As of the Change Date specified in that file, in accordance with
+# the Business Source License, use of this software will be governed
+# by the Apache License, Version 2.0.
+
+# This file is processed by mkpipeline.py to trim unnecessary steps in PR
+# builds. The inputs for steps using the `mzcompose` plugin are computed
+# automatically. Inputs for other steps need to be manually listed in the
+# `inputs` key.
+
+dag: true
+
+steps:
+  - id: build
+    label: ":docker: build"
+    command: bin/ci-builder run stable bin/pyactivate --dev -m ci.test.build
+    timeout_in_minutes: 30
+    agents:
+      queue: builder
+
+  - id: lint-fast
+    label: ":bath: lint and rustfmt"
+    command: bin/ci-builder run stable ci/test/lint-fast.sh
+    inputs:
+      - "*"
+    timeout_in_minutes: 10
+
+  - id: lint-slow
+    label: ":paperclip: clippy and doctests"
+    command: bin/ci-builder run stable ci/test/lint-slow.sh
+    inputs:
+      - Cargo.lock
+      - "**/Cargo.toml"
+      - "**/*.rs"
+    timeout_in_minutes: 30
+    agents:
+      queue: builder
+
+  - id: lint-macos
+    label: ":mac: clippy"
+    command: bin/check
+    inputs:
+      - Cargo.lock
+      - "**/Cargo.toml"
+      - "**/*.rs"
+    timeout_in_minutes: 30
+    agents:
+      queue: mac
+
+  - id: lint-docs
+    label: ":briefcase: lint docs"
+    command: bin/ci-builder run stable ci/www/lint.sh
+    inputs:
+      - doc/user
+    timeout_in_minutes: 30
+
+  - id: cargo-test
+    label: ":cargo: test"
+    depends_on: build
+    timeout_in_minutes: 30
+    plugins:
+      - ./ci/plugins/mzcompose:
+          composition: cargo-test
+          run: app
+
+  - id: miri-test
+    label: ":face_with_monocle: miri test"
+    command: bin/ci-builder run nightly ci/test/cargo-test-miri.sh
+    inputs: [src/repr, ci/builder/nightly.stamp]
+    timeout_in_minutes: 30
+    agents:
+      queue: builder
+
+  - id: testdrive
+    label: ":racing_car: testdrive"
+    depends_on: build
+    timeout_in_minutes: 30
+    inputs: [test/testdrive]
+    plugins:
+      - ./ci/plugins/mzcompose:
+          composition: testdrive
+          run: ci
+
+  - id: kafka-ssl
+    label: ":lock: Kafka SSL smoke test"
+    depends_on: build
+    timeout_in_minutes: 30
+    inputs: [test/kafka-ssl/smoketest.td]
+    plugins:
+      - ./ci/plugins/mzcompose:
+          composition: kafka-ssl
+          run: testdrive
+
+  - id: kafka-krb5
+    label: ":hotdog: Kafka Kerberos smoke test"
+    depends_on: build
+    timeout_in_minutes: 30
+    inputs: [test/kafka-krb5/smoketest.td]
+    plugins:
+      - ./ci/plugins/mzcompose:
+          composition: kafka-krb5
+          run: testdrive
+
+  - id: kafka-sasl-plain
+    label: ":hotdog: Kafka SASL PLAIN smoke test"
+    depends_on: build
+    timeout_in_minutes: 30
+    inputs: [test/kafka-sasl-plain/smoketest.td]
+    plugins:
+      - ./ci/plugins/mzcompose:
+          composition: kafka-sasl-plain
+          run: testdrive
+
+  - id: short-sqllogictest
+    label: ":bulb: Short SQL logic tests"
+    depends_on: build
+    command: ci/test/slt-fast.sh
+    timeout_in_minutes: 10
+    inputs: [test/sqllogictest]
+    plugins:
+      - ./ci/plugins/mzcompose:
+          composition: sqllogictest
+          run: sqllogictest
+
+  - id: streaming-demo
+    label: ":shower: protobuf kafka streaming-demo"
+    depends_on: build
+    timeout_in_minutes: 30
+    plugins:
+      - ./ci/plugins/mzcompose:
+          composition: billing
+          run: ci
+
+  - id: perf-kinesis
+    label: ":shower: kinesis streaming demo"
+    depends_on: build
+    timeout_in_minutes: 30
+    plugins:
+      - ./ci/plugins/mzcompose:
+          composition: perf-kinesis
+          run: ci
+
+  - id: perf-upsert
+    label: ":point_up: upsert streaming demo"
+    depends_on: build
+    timeout_in_minutes: 30
+    plugins:
+      - ./ci/plugins/mzcompose:
+          composition: perf-upsert
+          run: ci
+
+  - id: chbench-demo
+    label: "chbench sanity check"
+    depends_on: build
+    plugins:
+      - ./ci/plugins/mzcompose:
+          composition: chbench
+          run: ci
+    timeout_in_minutes: 30
+
+  - id: avro-upsert-benchmark
+    label: "avro upsert benchmark sanity check"
+    depends_on: build
+    plugins:
+      - ./ci/plugins/mzcompose:
+          composition: avro-upsert
+          run: ci
+    timeout_in_minutes: 10
+
+  - id: tb
+    label: tb
+    depends_on: build
+    plugins:
+      - ./ci/plugins/mzcompose:
+          composition: tb
+          run: ci
+    timeout_in_minutes: 30
+
+  - id: catalog-compat
+    label: ":book: catalog compatibility check"
+    depends_on: build
+    timeout_in_minutes: 30
+    plugins:
+      - ./ci/plugins/mzcompose:
+          composition: catalog-compat
+          run: catalog-compat
+
+  - id: metabase-demo
+    label: "metabase-demo"
+    depends_on: build
+    timeout_in_minutes: 10
+    plugins:
+      - ./ci/plugins/mzcompose:
+          composition: metabase
+          run: smoketest
+
+  - id: dbt-materialize
+    label: "dbt-materialize"
+    depends_on: build
+    timeout_in_minutes: 10
+    plugins:
+      - ./ci/plugins/mzcompose:
+          composition: dbt-materialize
+          run: ci
+
+  - id: mzcompose-self
+    label: "mzcompose self test"
+    timeout_in_minutes: 10
+    inputs: [test/mzcompose, 'misc/python/materialize']
+    command: bin/ci-mzcompose
+
+  - id: lang-csharp
+    label: ":csharp: tests"
+    depends_on: build
+    timeout_in_minutes: 10
+    inputs: [test/lang/csharp]
+    plugins:
+      - ./ci/plugins/mzcompose:
+          composition: csharp
+          run: csharp
+
+  - id: lang-js
+    label: ":javascript: tests"
+    depends_on: build
+    timeout_in_minutes: 10
+    inputs: [test/lang/js]
+    plugins:
+      - ./ci/plugins/mzcompose:
+          composition: js
+          run: js
+
+  - id: lang-java
+    label: ":java: tests"
+    depends_on: build
+    timeout_in_minutes: 10
+    inputs: [test/lang/java]
+    plugins:
+      - ./ci/plugins/mzcompose:
+          composition: java
+          run: java-smoketest
+
+  - id: lang-python
+    label: ":python: tests"
+    depends_on: build
+    timeout_in_minutes: 10
+    inputs: [test/lang/python]
+    plugins:
+      - ./ci/plugins/mzcompose:
+          composition: python
+          run: python
+
+  - id: deploy
+    label: ":rocket: Deploy"
+    depends_on:
+      - lint-fast
+      - lint-slow
+      - cargo-test
+      - miri-test
+      - testdrive
+      - kafka-ssl
+      - kafka-krb5
+      - short-sqllogictest
+      - streaming-demo
+      - chbench-demo
+      - catalog-compat
+      - lang-js
+      - metabase-demo
+    trigger: deploy
+    async: true
+    branches: "main v*.*"
+    build:
+      commit: "$BUILDKITE_COMMIT"
+      branch: "$BUILDKITE_BRANCH"
+      env:
+        BUILDKITE_TAG: "$BUILDKITE_TAG"

@@ -1,0 +1,26 @@
+[package]
+name = "prof"
+description = "CPU and memory profiling tools."
+version = "0.0.0"
+edition = "2018"
+publish = false
+
+[dependencies]
+anyhow = "1.0.38"
+backtrace = "0.3.56"
+jemalloc-ctl = { version = "0.3.0", features = ["use_std"], optional = true }
+lazy_static = "1.4.0"
+pprof = "0.4.2"
+tempfile = "3.2.0"
+tokio = { version = "1.2.0", features = ["time"] }
+
+[features]
+# Whether to automatically enable the jemalloc feature if compiling for a target
+# besides macOS.
+#
+# TODO(benesch): remove this crate's build script and this feature once Cargo
+# supports target-specific features.
+# See: https://github.com/rust-lang/cargo/issues/1197
+auto-jemalloc = ["jemalloc-ctl"]
+# Whether to enable profiling features that depend on jemalloc.
+jemalloc = ["jemalloc-ctl"]

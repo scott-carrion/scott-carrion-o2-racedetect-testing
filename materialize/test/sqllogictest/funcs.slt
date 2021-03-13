@@ -1,0 +1,1037 @@
+# Copyright Materialize, Inc. All rights reserved.
+#
+# Use of this software is governed by the Business Source License
+# included in the LICENSE file at the root of this repository.
+#
+# As of the Change Date specified in that file, in accordance with
+# the Business Source License, use of this software will be governed
+# by the Apache License, Version 2.0.
+
+mode cockroach
+
+# Test date_trunc()
+
+# TODO: PostgreSQL truncates trailing zeros from seconds, we do not.
+# This test should return:  2019-11-26 15:56:46.24115
+query T
+SELECT date_trunc('microseconds', TIMESTAMP '2019-11-26 15:56:46.241150')
+----
+2019-11-26 15:56:46.24115
+
+query T
+SELECT date_trunc('milliseconds', TIMESTAMP '2019-11-26 15:56:46.241150')
+----
+2019-11-26 15:56:46.241
+
+query T
+SELECT date_trunc('second', TIMESTAMP '2019-11-26 15:56:46.241150')
+----
+2019-11-26 15:56:46
+
+query T
+SELECT date_trunc('minute', TIMESTAMP '2019-11-26 15:56:46.241150')
+----
+2019-11-26 15:56:00
+
+query T
+SELECT date_trunc('hour', TIMESTAMP '2019-11-26 15:56:46.241150')
+----
+2019-11-26 15:00:00
+
+query T
+SELECT date_trunc('day', TIMESTAMP '2019-11-26 15:56:46.241150')
+----
+2019-11-26 00:00:00
+
+query T
+SELECT date_trunc('week', TIMESTAMP '2019-11-26 15:56:46.241150')
+----
+2019-11-25 00:00:00
+
+query T
+SELECT date_trunc('week', TIMESTAMP '2020-08-02 00:00:00')
+----
+2020-07-27 00:00:00
+
+query error timestamp out of range
+SELECT date_trunc('week', make_timestamp(-262144, 1, 1, 0, 0, 0))
+
+query T
+SELECT date_trunc('month', TIMESTAMP '2019-11-26 15:56:46.241150')
+----
+2019-11-01 00:00:00
+
+query T
+SELECT date_trunc('quarter', TIMESTAMP '2019-11-26 15:56:46.241150')
+----
+2019-10-01 00:00:00
+
+query T
+SELECT date_trunc('year', TIMESTAMP '2019-11-26 15:56:46.241150')
+----
+2019-01-01 00:00:00
+
+query T
+SELECT date_trunc('decade', TIMESTAMP '2019-11-26 15:56:46.241150')
+----
+2010-01-01 00:00:00
+
+# Expects the first year of the century, meaning 2001 instead of 2000.
+query T
+SELECT date_trunc('century', TIMESTAMP '2019-11-26 15:56:46.241150')
+----
+2001-01-01 00:00:00
+
+# Round down century correctly, meaning 2000 is rounded to 1901.
+query T
+SELECT date_trunc('century', TIMESTAMP '2000-11-26 15:56:46.241150')
+----
+1901-01-01 00:00:00
+
+# Expects the first year of the millennium, meaning 2001 instead of 2000.
+query T
+SELECT date_trunc('millennium', TIMESTAMP '2019-11-26 15:56:46.241150')
+----
+2001-01-01 00:00:00
+
+# Round down millennium correctly, meaning 2000 is rounded to 1001.
+query T
+SELECT date_trunc('millennium', TIMESTAMP '2000-11-26 15:56:46.241150')
+----
+1001-01-01 00:00:00
+
+# TODO: PostgreSQL displays timestamps with 0 or negative year as (1 - year) BC, while we do not.
+# TODO: Currently we do not parse BC/AD and it's erroneously considered a named time zone, so INTERVAL is used.
+# This test should return:  0011-01-01 00:00:00 BC
+# Expects the decade to be rounded down for BC.
+query T
+SELECT date_trunc('decade', TIMESTAMP '0001-01-01 00:00:00.000000' - INTERVAL '2'YEAR)
+----
+-0010-01-01 00:00:00
+
+# This test should return:  0100-01-01 00:00:00 BC
+# Expects the century to be rounded down for BC.
+query T
+SELECT date_trunc('century', TIMESTAMP '0001-01-01 00:00:00.000000' - INTERVAL '1'SECOND)
+----
+-0099-01-01 00:00:00
+
+# This test should return:  1000-01-01 00:00:00 BC
+# Expects the millennium to be rounded down for BC.
+query T
+SELECT date_trunc('millennium', TIMESTAMP '0001-01-01 00:00:00.000000' - INTERVAL '1'SECOND)
+----
+-0999-01-01 00:00:00
+
+query error unknown units 'bad'
+SELECT date_trunc('bad', TIMESTAMP '2019-11-26 15:56:46.241150')
+
+query T
+SELECT date_trunc('minute', TIMESTAMPTZ '1999-12-31 16:16:01+02:30')
+----
+1999-12-31 13:46:00+00
+
+query T
+SELECT date_trunc('day', TIMESTAMPTZ '1999-12-31 16:16:01+02:30')
+----
+1999-12-31 00:00:00+00
+
+query error unknown units 'bad'
+SELECT date_trunc('bad', TIMESTAMPTZ '1999-12-31 16:16:01+02:30')
+
+statement ok
+CREATE TABLE date_trunc_fields (
+    field text
+)
+
+statement ok
+INSERT INTO date_trunc_fields VALUES ('day'), ('DaY'), ('month'), ('MoNTH')
+
+query T rowsort
+SELECT date_trunc(field, TIMESTAMP '2019-11-26 15:56:46.241150') FROM date_trunc_fields
+----
+2019-11-26 00:00:00
+2019-11-26 00:00:00
+2019-11-01 00:00:00
+2019-11-01 00:00:00
+
+statement ok
+INSERT INTO date_trunc_fields VALUES ('bad')
+
+query error unknown units 'bad'
+SELECT date_trunc(field, TIMESTAMP '2019-11-26 15:56:46.241150') FROM date_trunc_fields
+
+mode standard
+
+statement ok
+CREATE TABLE date_trunc_timestamps (
+    ts timestamp
+)
+
+query T multiline
+EXPLAIN PLAN FOR SELECT date_trunc('day', ts) FROM date_trunc_timestamps
+----
+%0 =
+| Get materialize.public.date_trunc_timestamps (u3)
+| Map date_trunc_day_ts(#0)
+| Project (#1)
+
+EOF
+
+query T multiline
+EXPLAIN PLAN FOR SELECT date_trunc(field, ts) FROM date_trunc_fields, date_trunc_timestamps
+----
+%0 =
+| Get materialize.public.date_trunc_fields (u1)
+| ArrangeBy ()
+
+%1 =
+| Get materialize.public.date_trunc_timestamps (u3)
+
+%2 =
+| Join %0 %1
+| | implementation = Differential %1 %0.()
+| | demand = (#0, #1)
+| Map date_truncts(#0, #1)
+| Project (#2)
+
+EOF
+
+mode cockroach
+
+query R
+SELECT floor(CAST (1.1 AS double precision))
+----
+1
+
+query R
+SELECT floor(CAST (1.1 AS float))
+----
+1
+
+query RRRRR
+SELECT floor(1.1), floor(1.111), floor(100.1), floor(100.11), floor(-4.1)
+----
+1  1  100  100  -5
+
+
+query R
+SELECT ceil(CAST (1.1 AS double precision))
+----
+2
+
+query R
+SELECT ceil(CAST (1.1 AS float))
+----
+2
+
+query RRRRR
+SELECT ceil(1.1), ceil(1.111), ceil(100.1), ceil(100.11), ceil(-4.1)
+----
+2  2  101  101  -4
+
+# postgres converts ints to floats on floor/ceil
+query R
+SELECT floor(1)
+----
+1
+
+query R
+SELECT floor(1)
+----
+1
+
+query R
+SELECT floor(cast(1 AS bigint))
+----
+1
+
+query R
+SELECT ceil(cast(1 AS bigint))
+----
+1
+
+query R
+SELECT floor(NULL)
+----
+NULL
+
+query R
+SELECT ceil(NULL)
+----
+NULL
+
+statement ok
+CREATE TABLE null_test (
+   decimal_col decimal(14, 2),
+   float_col float
+)
+
+statement ok
+INSERT INTO null_test VALUES (5.06, -1.59), (-12.58, NULL), (2.96, 2.2), (NULL, 23.8), (-9.4, -48.2)
+
+query RR rowsort
+SELECT floor(decimal_col), floor(float_col) FROM null_test
+----
+-10  -49
+-13  NULL
+2  2
+5  -2
+NULL  23
+
+query RR rowsort
+SELECT ceil(decimal_col), ceil(float_col) FROM null_test
+----
+-12  NULL
+-9  -48
+3  3
+6  -1
+NULL  24
+
+# Tests for the sqrt function.
+#
+# The implementation of sqrt delegates to {f32,f64}::sqrt, so these tests are
+# not particularly extensive.
+
+query error cannot take square root of a negative number
+SELECT sqrt(-1::float)
+
+query error cannot take square root of a negative number
+SELECT sqrt(-1::double precision)
+
+query error cannot take square root of a negative number
+SELECT sqrt(-1::decimal(15, 2))
+
+query R
+SELECT sqrt(1.23783::float)
+----
+1.112578087147145
+
+query R
+SELECT sqrt(1.23783::double)
+----
+1.112578087147145
+
+query R
+SELECT sqrt(1.23783::decimal(15, 5))
+----
+1.11257
+
+# Test cbrt.
+query R
+SELECT cbrt(NULL)
+----
+NULL
+
+query R
+SELECT cbrt(1.23783::float)
+----
+1.0737100084353584
+
+query R
+SELECT cbrt(1.23783::double)
+----
+1.0737100084353584
+
+query R
+SELECT cbrt(1.23783::decimal(15,5))
+----
+1.0737100084353584
+
+query R
+SELECT cbrt(-8::double)
+----
+-2
+
+query R
+SELECT cbrt(3::int)
+----
+1.4422495703074083
+
+# Test coalesce.
+query I
+SELECT coalesce(NULL, 1, NULL)
+----
+1
+
+query R
+SELECT coalesce(NULL, 1, NULL)
+----
+1
+
+query T
+SELECT coalesce('hello', 'world', NULL)
+----
+hello
+
+statement ok
+CREATE VIEW v AS SELECT 1 AS a
+
+# Coalesce should reduce away errors that statically can be shown not to occur.
+query T
+SELECT coalesce(1, 1 / 0, a) FROM v
+----
+1
+
+# Tests issue #2355, that type information for Maps are correctly constructed
+# before being passed to expressions for optimization.
+statement ok
+CREATE VIEW bytes AS SELECT null::bytea AS data
+
+query T
+SELECT
+    COALESCE(data::jsonb->>'field1', data::jsonb->>'field2')
+FROM (
+    SELECT CONVERT_FROM(data, 'utf8') AS data FROM bytes
+)
+----
+NULL
+
+query T
+SELECT trim(LEADING 'xy' FROM 'yxytrimyxy');
+----
+trimyxy
+
+query T
+SELECT ltrim('yxytrimyxy', 'xy');
+----
+trimyxy
+
+query T
+SELECT rtrim('yxytrimyxy', 'xy');
+----
+yxytrim
+
+query T
+SELECT btrim('yxytrimyxy', 'xy');
+----
+trim
+
+query T
+SELECT btrim('  yxytrimyxy  ');
+----
+yxytrimyxy
+
+query T
+SELECT rtrim('yxytrimyxy  ');
+----
+yxytrimyxy
+
+query T
+SELECT ltrim('   yxytrimyxy');
+----
+yxytrimyxy
+
+query T
+SELECT trim('xy' FROM 'yxytrimyxy');
+----
+trim
+
+query T
+SELECT trim(TRAILING FROM 'yxytrimyxy  ');
+----
+yxytrimyxy
+
+query T
+SELECT trim(FROM '  yxytrimyxy  ');
+----
+yxytrimyxy
+
+query T
+SELECT trim('   yxytrimyxy  ');
+----
+yxytrimyxy
+
+query T
+SELECT trim(LEADING '   yxytrimyxy');
+----
+yxytrimyxy
+
+statement error
+SELECT trim('c' 'ccccdogcc');
+
+# Test IS NULL reduction.
+
+mode standard
+
+statement ok
+CREATE TABLE t (
+    a int,
+    b int NOT NULL
+)
+
+query T multiline
+EXPLAIN PLAN FOR SELECT a IS NULL FROM t
+----
+%0 =
+| Get materialize.public.t (u9)
+| Map isnull(#0)
+| Project (#2)
+
+EOF
+
+query T multiline
+EXPLAIN PLAN FOR SELECT a + a + a + a + a IS NULL FROM t
+----
+%0 =
+| Get materialize.public.t (u9)
+| Map isnull(#0)
+| Project (#2)
+
+EOF
+
+query T multiline
+EXPLAIN PLAN FOR SELECT a + b IS NULL FROM t
+----
+%0 =
+| Get materialize.public.t (u9)
+| Map isnull(#0)
+| Project (#2)
+
+EOF
+
+# Ensure that (a AND b) IS NULL is *not* reduced, as it is not as simple as
+# rewriting (A IS NULL) OR (b IS NULL). There are probably rewrite rules that
+# exist, but we do not support them yet. Similarly for OR.
+
+query T multiline
+EXPLAIN PLAN FOR SELECT (a::bool AND b::bool) IS NULL FROM t
+----
+%0 =
+| Get materialize.public.t (u9)
+| Map isnull((i32tobool(#0) && i32tobool(#1)))
+| Project (#2)
+
+EOF
+
+mode cockroach
+
+# Test qualified function names.
+
+query I
+SELECT abs(-1)
+----
+1
+
+query I
+SELECT pg_catalog.abs(1)
+----
+1
+
+query I
+SELECT materialize.pg_catalog.abs(1)
+----
+1
+
+query error function mz_catalog.abs\(integer\) does not exist
+SELECT mz_catalog.abs(1)
+
+query error unknown database 'noexist'
+SELECT noexist.pg_catalog.abs(1)
+
+# mod is a special case for qualified function names, since it is transformed
+# away by an early pass in the planner.
+
+query I
+SELECT mod(7, 4)
+----
+3
+
+query I
+SELECT pg_catalog.mod(7, 4)
+----
+3
+
+query error function mz_catalog.mod\(integer, integer\) does not exist
+SELECT mz_catalog.mod(7, 4)
+
+query error unknown database 'noexist'
+SELECT noexist.pg_catalog.mod(7, 4)
+
+query T
+SELECT pg_catalog.pg_encoding_to_char(6)
+----
+UTF8
+
+query T
+SELECT pg_catalog.pg_encoding_to_char(7)
+----
+NULL
+
+# The following tests are taken from cockroach/builtin_function.slt
+# todo@jldlaughlin: remove these duplicates
+
+query I
+SELECT array_lower(ARRAY['a', 'b'], 1)
+----
+1
+
+query I
+SELECT array_lower(ARRAY['a'], 1)
+----
+1
+
+query I
+SELECT array_lower(ARRAY['a'], 0)
+----
+NULL
+
+query I
+SELECT array_lower(ARRAY['a'], 2)
+----
+NULL
+
+query I
+SELECT array_lower(ARRAY[ARRAY[1, 2]], 2)
+----
+1
+
+query I
+SELECT array_upper(ARRAY['a', 'b'], 1)
+----
+2
+
+query I
+SELECT array_upper(ARRAY['a'], 1)
+----
+1
+
+query I
+SELECT array_upper(ARRAY['a'], 0)
+----
+NULL
+
+query I
+SELECT array_upper(ARRAY['a'], 2)
+----
+NULL
+
+query I
+SELECT array_upper(ARRAY[ARRAY[1, 2]], 2)
+----
+2
+
+# Additional array_lower, array_upper tests
+query I
+SELECT array_lower(ARRAY[[[9]]], 2)
+----
+1
+
+query I
+SELECT array_lower(ARRAY[[['a', 'b']]], 3)
+----
+1
+
+query I
+SELECT array_lower(ARRAY[[['a', 'b']]], 4)
+----
+NULL
+
+query I
+SELECT array_upper(ARRAY[[[1, 2]]], 3)
+----
+2
+
+query I
+SELECT array_upper(ARRAY[[[1, 2]]], 4)
+----
+NULL
+
+query I
+SELECT array_upper(ARRAY[NULL], 1)
+----
+1
+
+query I
+SELECT array_upper(ARRAY[1], NULL)
+----
+NULL
+
+query I
+SELECT array_upper(NULL::text[], 1)
+----
+NULL
+
+query error Cannot call function array_upper\(unknown, integer\): arguments cannot be implicitly cast to any implementation's parameters; try providing explicit casts
+SELECT array_upper(NULL, 1)
+
+query I
+SELECT array_length(ARRAY['a', 'b'], 1)
+----
+2
+
+query I
+SELECT array_length(ARRAY['a'], 1)
+----
+1
+
+query I
+SELECT array_length(ARRAY['a'], 0)
+----
+NULL
+
+query I
+SELECT array_length(ARRAY['a'], 2)
+----
+NULL
+
+query I
+SELECT array_length(ARRAY[ARRAY[1, 2]], 2)
+----
+2
+
+query I
+SELECT array_length(ARRAY[]::int[], 1)
+----
+NULL
+
+# Test strange collapsing behavior of nested empty arrays. See #5545.
+
+query TIII
+SELECT arr, array_lower(arr, 1), array_upper(arr, 1), array_length(arr, 1) FROM
+    (VALUES
+        (ARRAY[]::int[]),
+        (ARRAY[ARRAY[]]::int[]),
+        (ARRAY[ARRAY[], ARRAY[], ARRAY[]]::int[]),
+        (ARRAY[ARRAY[ARRAY[ARRAY[]]]]::int[])
+    ) AS _ (arr)
+----
+{}  NULL  NULL  NULL
+{}  NULL  NULL  NULL
+{}  NULL  NULL  NULL
+{}  NULL  NULL  NULL
+
+query T
+SELECT upper('a1Bd')
+----
+A1BD
+
+query T
+SELECT upper('ALREADYUP')
+----
+ALREADYUP
+
+query error Cannot call function upper\(numeric\(38,1\)\): arguments cannot be implicitly cast to any implementation's parameters; try providing explicit casts
+SELECT upper(2.2)
+
+query T
+SELECT lower('a1Bd')
+----
+a1bd
+
+query T
+SELECT lower('alreadylow')
+----
+alreadylow
+
+query error Cannot call function lower\(interval\): arguments cannot be implicitly cast to any implementation's parameters; try providing explicit casts
+SELECT lower('1ms'::interval)
+
+# Test trigonometric functions.
+
+# Use standard mode to round floats to three digits of precision. This makes
+# tests more reliable across platforms, as platforms have different
+# implementations of the trigonometric functions that result in slight
+# variance in the least significant digits.
+mode standard
+
+query R
+SELECT sin(NULL)
+----
+NULL
+
+query R
+SELECT sinh(NULL)
+----
+NULL
+
+query R
+SELECT cos(NULL)
+----
+NULL
+
+query R
+SELECT cosh(NULL)
+----
+NULL
+
+query R
+SELECT tan(NULL)
+----
+NULL
+
+query R
+SELECT tanh(NULL)
+----
+NULL
+
+query R
+SELECT cot(NULL)
+----
+NULL
+
+query R
+SELECT sin('NaN'::double)
+----
+NaN
+
+query R
+SELECT sinh('NaN'::double)
+----
+NaN
+
+query R
+SELECT cos('NaN'::double)
+----
+NaN
+
+query R
+SELECT cosh('NaN'::double)
+----
+NaN
+
+query R
+SELECT tan('NaN'::double)
+----
+NaN
+
+query R
+SELECT tanh('NaN'::double)
+----
+NaN
+
+query R
+SELECT cot('NaN'::double)
+----
+NaN
+
+query R
+SELECT sin(0::double)
+----
+0.000
+
+query R
+SELECT sinh(0::double)
+----
+0.000
+
+query R
+SELECT cos(0::double)
+----
+1.000
+
+query R
+SELECT cosh(0::double)
+----
+1.000
+
+query R
+SELECT tan(0::double)
+----
+0.000
+
+query R
+SELECT tanh(0::double)
+----
+0.000
+
+query R
+SELECT cot(0::double)
+----
+inf
+
+query R
+SELECT cot(-0::double)
+----
+-inf
+
+query R
+SELECT sin(1::double)
+----
+0.841
+
+query R
+SELECT sinh(1::double)
+----
+1.175
+
+query R
+SELECT cos(1::double)
+----
+0.540
+
+query R
+SELECT cosh(1::double)
+----
+1.543
+
+query R
+SELECT tan(1.01::double)
+----
+1.592
+
+query R
+SELECT tanh(1::double)
+----
+0.762
+
+query R
+SELECT cot(1.01::double)
+----
+0.628
+
+query error function sin is only defined for finite arguments
+SELECT sin('inf'::double)
+
+query R
+SELECT sinh('inf'::double)
+----
+inf
+
+query error function cos is only defined for finite arguments
+SELECT cos('inf'::double)
+
+query R
+SELECT cosh('inf'::double)
+----
+inf
+
+query error function tan is only defined for finite arguments
+SELECT tan('inf'::double)
+
+query R
+SELECT tanh('inf'::double)
+----
+1.000
+
+query error function cot is only defined for finite arguments
+SELECT cot('inf'::double)
+
+query error function sin is only defined for finite arguments
+SELECT sin('-inf'::double)
+
+query R
+SELECT sinh('-inf'::double)
+----
+-inf
+
+query error function cos is only defined for finite arguments
+SELECT cos('-inf'::double)
+
+query R
+SELECT cosh('-inf'::double)
+----
+inf
+
+query error function tan is only defined for finite arguments
+SELECT tan('-inf'::double)
+
+query R
+SELECT tanh('-inf'::double)
+----
+-1.000
+
+# Use the more reasonable number representation, as the standard mode
+# causes all sorts of weird representation issues with exp and log:
+mode cockroach
+
+query error function cot is only defined for finite arguments
+SELECT cot('-inf'::double)
+
+query error function log10 is not defined for zero
+SELECT log10(0.0::double)
+
+query error function log10 is not defined for zero
+SELECT log10(+0.0::double)
+
+query error function log10 is not defined for negative numbers
+SELECT log10(-1.0::double)
+
+query R
+SELECT log10(10.0::double)
+----
+1
+
+query R
+SELECT log(10.0::decimal(15, 5))
+----
+1
+
+query error function log is not defined for zero
+SELECT log(0.0, 10)
+
+query error function log is not defined for zero
+SELECT log(+0.0, 10)
+
+query error function log is not defined for negative numbers
+SELECT log(-10, 10)
+
+query error function log is not defined for zero
+SELECT log(10, 0.0)
+
+query error function log is not defined for zero
+SELECT log(10, +0.0)
+
+query error function log is not defined for negative numbers
+SELECT log(10.0, -10)
+
+query R
+SELECT log(10, 10)
+----
+1
+
+query R
+SELECT log(400, 20)
+----
+2
+
+query R
+SELECT log10(10::decimal(15, 5))
+----
+1
+
+query R
+SELECT round(ln(13::float)::decimal(15, 5), 3)
+----
+2.5650
+
+query error function ln is not defined for negative numbers
+SELECT ln(-1)
+
+query error function ln is not defined for zero
+SELECT ln(0)
+
+query R
+SELECT ln(13.0000::decimal(15, 5))
+----
+2.56494
+
+query R
+SELECT round(exp(2)::decimal(15, 5), 3)
+----
+7.3890
+
+query R
+SELECT exp(ln(2))
+----
+2
+
+query T
+SELECT exp(ln(2::decimal(15, 5)))
+----
+2
+
+query R
+SELECT power(382, 5);
+----
+8134236862432
+
+query T
+SELECT power(9::float, 0.5);
+----
+3.000
+
+query T
+SELECT power(9::decimal(15, 5), 0.5::decimal(15, 5));
+----
+3

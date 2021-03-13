@@ -1,0 +1,18 @@
+[package]
+name = "aws-util"
+description = "Internal AWS utility library for Materialize."
+version = "0.0.0"
+edition = "2018"
+publish = false
+
+[dependencies]
+anyhow = "1.0.38"
+log = "0.4.13"
+rusoto_core = { git = "https://github.com/rusoto/rusoto.git" }
+rusoto_credential = { git = "https://github.com/rusoto/rusoto.git" }
+rusoto_kinesis = { git = "https://github.com/rusoto/rusoto.git" }
+rusoto_s3 = { git = "https://github.com/rusoto/rusoto.git" }
+rusoto_sts = { git = "https://github.com/rusoto/rusoto.git" }
+rusoto_sqs = { git = "https://github.com/rusoto/rusoto.git" }
+serde = { version = "1.0.123", features = ["derive"] }
+tokio = "1.2.0"

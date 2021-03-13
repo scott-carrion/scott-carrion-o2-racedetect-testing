@@ -1,0 +1,21 @@
+# Editor or environment-specific entries should not be committed to the
+# repository but can be kept in Git's global configuration:
+#
+# https://help.github.com/articles/ignoring-files/#create-a-global-gitignore
+#
+# For advice on what entries to include in your global gitignore, please see
+# GitHub's gitignore repository, which contains an excellent set of entries for
+# many different editing tools:
+#
+# https://github.com/github/gitignore/tree/master/Global
+
+target
+miri-target
+.mtrlz.log
+**/*.rs.bk
+.netlify
+mzdata
+__pycache__
+.mypy_cache
+venv
+node_modules

@@ -1,0 +1,162 @@
+#!/usr/bin/env python3
+
+# Copyright Materialize, Inc. All rights reserved.
+#
+# Use of this software is governed by the Business Source License
+# included in the LICENSE file at the root of this repository.
+#
+# As of the Change Date specified in that file, in accordance with
+# the Business Source License, use of this software will be governed
+# by the Apache License, Version 2.0.
+#
+# pyactivate — runs a script in the Materialize Python virtualenv.
+
+from typing import List, Optional
+from pathlib import Path
+import logging
+import os
+import platform
+import subprocess
+import sys
+import sysconfig
+import venv  # type: ignore
+
+logger = logging.getLogger("bootstrap")
+
+
+def main(args: List[str]) -> int:
+    logging.basicConfig(level=os.environ.get("MZ_DEV_LOG", "WARNING").upper())
+    logger.debug("args={}".format(args))
+
+    # Validate Python version.
+    if sys.hexversion < 0x03050000:
+        print("fatal: python v3.5.0+ required", file=sys.stderr)
+        print(
+            " hint: you have v{}.{}.{}".format(
+                sys.version_info.major, sys.version_info.minor, sys.version_info.micro
+            ),
+            file=sys.stderr,
+        )
+        return 1
+
+    root_dir = Path(__file__).parent.parent
+    py_dir = root_dir / "misc" / "python"
+    logger.debug("root_dir={} py_dir={}".format(root_dir, py_dir))
+
+    dev = False
+    if len(args) > 0 and args[0] == "--dev":
+        del args[0]
+        dev = True
+
+    # If we're not in the CI builder container, activate a virtualenv with the
+    # necessary dependencies.
+    if os.environ.get("MZ_DEV_CI_BUILDER", False):
+        python = "python3"
+    else:
+        python = str(activate_venv(py_dir, dev))
+    logger.debug("python={}".format(python))
+
+    # Reinvoke with the interpreter from the virtualenv.
+    os.environ["PYTHONPATH"] = str(py_dir.resolve())
+    os.environ["MZ_ROOT"] = str(root_dir.resolve())
+    os.execvp(python, [python, *args])
+
+
+def activate_venv(py_dir: Path, dev: bool = False) -> Path:
+    """Bootstrap and activate a virtualenv at py_dir/venv"""
+    venv_dir = py_dir / "venv"
+    stamp_path = venv_dir / "dep_stamp"
+    python = venv_dir / "bin" / "python"
+    logger.debug("venv_dir={} python={}".format(venv_dir, python))
+
+    # Create a virtualenv, if necessary. virtualenv creation is not atomic, so
+    # we don't want to assume the presence of a `venv` directory means that we
+    # have a working virtualenv. Instead we use the presence of the
+    # `stamp_path`, as that indicates the virtualenv was once working enough to
+    # have dependencies installed into it.
+    try:
+        os.stat(stamp_path)
+        subprocess.check_call([python, "-c", ""])
+    except Exception as e:
+        print("==> Checking for existing virtualenv")
+        if isinstance(e, FileNotFoundError):
+            print("no existing virtualenv detected")
+        else:
+            # Usually just an indication that the user has upgraded the system
+            # Python that the virtualenv is referring to. Not important to
+            # bubble up the error here. If it's persistent, it'll occur in the
+            # new virtual env and bubble up when we exec later.
+            print(
+                "warning: existing virtualenv is unable to execute python; will recreate"
+            )
+            logger.info(f"python exec error: {e}")
+        print("==> Initializing virtualenv in {}".format(venv_dir))
+        # Install Python into the virtualenv via a symlink rather than copying,
+        # except on Windows. This matches the behavior of the `python -m venv`
+        # command line tool. This is important on macOS, where the default
+        # `symlinks=False` is broken with the system Python.
+        # See: https://bugs.python.org/issue38705
+        symlinks = os.name != "nt"
+        venv.create(venv_dir, with_pip=True, clear=True, symlinks=symlinks)
+        # Work around a Debian bug which incorrectly makes pip think that we've
+        # installed wheel in the virtual environment when we haven't. This is
+        # a no-op on systems without the bug.
+        # See: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=959997
+        for path in venv_dir.glob("share/python-wheels/wheel*"):
+            path.unlink()
+
+    # The Python that ships with Xcode 12 is broken and attempts to compile
+    # Python extensions for ARM when it shouldn't. Detect this known-broken
+    # Python and manually override the architecture to x86_64.
+    # For context, see https://github.com/gorakhargosh/watchdog/issues/689.
+    # (The failing package for us is regex, not watchdog, but the underlying
+    # issue is the same.)
+    if (
+        sys.executable == "/Applications/Xcode.app/Contents/Developer/usr/bin/python3"
+        and platform.machine() == "x86_64"
+        and platform.python_version() == "3.8.2"
+    ):
+        os.environ["ARCHFLAGS"] = "-arch x86_64"
+
+    acquire_deps(venv_dir)
+    if dev:
+        acquire_deps(venv_dir, "dev")
+
+    return python
+
+
+def acquire_deps(venv_dir: Path, variant: Optional[str] = None) -> None:
+    """Install normal/development dependencencies into the virtualenv"""
+
+    stamp_path = venv_dir / (f"{variant}_dep_stamp" if variant else "dep_stamp")
+
+    # Check when dependencies were last installed.
+    try:
+        stamp_mtime = os.path.getmtime(stamp_path)
+    except FileNotFoundError:
+        stamp_mtime = 0
+    logger.debug("stamp_path={} stamp_mtime={}".format(stamp_path, stamp_mtime))
+
+    # Check when the requirements file was last modified.
+    requirements_path = venv_dir.parent / (
+        f"requirements-{variant}.txt" if variant else "requirements.txt"
+    )
+    requirements_mtime = os.path.getmtime(requirements_path)
+    logger.debug(
+        "requirements_path={} requirements_mtime={}".format(
+            requirements_path, requirements_mtime
+        )
+    )
+
+    # Update dependencies, if necessary.
+    if stamp_mtime <= requirements_mtime:
+        print("==> Updating {}dependencies with pip".format(variant + " " if variant else ""))
+        subprocess.check_call([
+            venv_dir / "bin" / "pip", "install", "-r", requirements_path,
+            "--disable-pip-version-check",
+        ])
+        stamp_path.touch()
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

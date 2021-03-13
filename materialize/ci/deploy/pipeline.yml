@@ -1,0 +1,29 @@
+# Copyright Materialize, Inc. All rights reserved.
+#
+# Use of this software is governed by the Business Source License
+# included in the LICENSE file at the root of this repository.
+#
+# As of the Change Date specified in that file, in accordance with
+# the Business Source License, use of this software will be governed
+# by the Apache License, Version 2.0.
+
+steps:
+  - command: bin/ci-builder run nightly ci/deploy/devsite.sh
+    branches: main
+    timeout_in_minutes: 30
+    agents:
+      queue: builder
+    concurrency: 1
+    concurrency_group: deploy/devsite
+
+  - command: bin/ci-builder run stable bin/pyactivate --dev -m ci.deploy.linux
+    timeout_in_minutes: 30
+    concurrency: 1
+    concurrency_group: deploy/linux
+
+  - command: bin/pyactivate --dev -m ci.deploy.macos
+    agents:
+      queue: mac
+    timeout_in_minutes: 30
+    concurrency: 1
+    concurrency_group: deploy/macos

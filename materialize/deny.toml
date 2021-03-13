@@ -1,0 +1,63 @@
+[bans]
+multiple-versions = "deny"
+skip = [
+    # Do not add to this list without good reason! Duplicate dependencies slow
+    # down compilation and bloat the binary.
+
+    # Waiting for clap to upgrade to v0.12.
+    { name = "ansi_term", version = "0.11.0" },
+
+    # Waiting on:
+    #   - Upgrade to rand v0.8.
+    #   - https://github.com/Alexhuszagh/rust-lexical/pull/54
+    { name = "cfg-if", version = "0.1.0" },
+
+    # Waiting on tracing-futures.
+    { name = "pin-project", version = "0.4.27" },
+    { name = "pin-project-internal", version = "0.4.22" },
+
+    # Waiting on phf and uuid to upgrade to rand v0.8.
+    { name = "getrandom", version = "0.1" },
+    { name = "rand", version = "0.7.3" },
+    { name = "rand_chacha", version = "0.2.2" },
+    { name = "rand_core", version = "0.5.1" },
+    { name = "rand_hc", version = "0.2.0" },
+    { name = "wasi", version = "0.10.0+wasi-snapshot-preview1" },
+
+    # Waiting on parse_duration.
+    { name = "num-bigint", version = "0.2.6" },
+
+    # Waiting on:
+    #   - https://github.com/Amanieu/parking_lot/pull/275
+    { name = "redox_syscall", version = "0.1.56" },
+]
+deny = [
+    # Strum has suspect code quality and includes many unneeded features. Use
+    # more targeted enum macro crates, e.g. `enum-kinds`.
+    { name = "strum" },
+    { name = "strum-macros" },
+]
+
+[licenses]
+allow = [
+    "Apache-2.0",
+    "CC0-1.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "Zlib",
+]
+private = { ignore = true }
+
+[sources]
+unknown-git = "deny"
+unknown-registry = "deny"
+allow-git = [
+    "https://github.com/MaterializeInc/rust-prometheus.git",
+    "https://github.com/MaterializeInc/serde-protobuf.git",
+    "https://github.com/TimelyDataflow/timely-dataflow",
+    "https://github.com/TimelyDataflow/differential-dataflow.git",
+    "https://github.com/fede1024/rust-rdkafka.git",
+    "https://github.com/rusoto/rusoto.git"
+]

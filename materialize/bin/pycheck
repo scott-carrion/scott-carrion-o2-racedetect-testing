@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+# Copyright Materialize, Inc. All rights reserved.
+#
+# Use of this software is governed by the Business Source License
+# included in the LICENSE file at the root of this repository.
+#
+# As of the Change Date specified in that file, in accordance with
+# the Business Source License, use of this software will be governed
+# by the Apache License, Version 2.0.
+#
+# pycheck — `cargo check` for python.
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+. misc/shlib/shlib.bash
+
+py_files=$(git_files "ci/*.py" "misc/python/*.py" "misc/mzutil/scripts/*.py" "misc/kafka-util/scripts/*.py")
+
+# Bail out with a nice error message if we discover any syntax errors, so that
+# mypy and pytest don't spew nonsense.
+if ! bin/pyactivate --dev -m compileall -q -l -i - <<< "$py_files"; then
+    echo "pycheck: $(red error:) python syntax errors found"
+    exit 1
+fi
+
+try xargs bin/pyactivate --dev -m mypy --pretty --no-error-summary <<< "$py_files"
+try bin/pyactivate --dev -m pytest -qq --doctest-modules misc/python
+
+try_finish

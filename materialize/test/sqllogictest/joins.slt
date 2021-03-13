@@ -1,0 +1,604 @@
+# Copyright Materialize, Inc. All rights reserved.
+#
+# Use of this software is governed by the Business Source License
+# included in the LICENSE file at the root of this repository.
+#
+# As of the Change Date specified in that file, in accordance with
+# the Business Source License, use of this software will be governed
+# by the Apache License, Version 2.0.
+
+mode cockroach
+
+statement ok
+CREATE TABLE l (la int, lb text)
+
+statement ok
+CREATE TABLE r (ra int, rb text)
+
+statement ok
+INSERT INTO l VALUES (1, 'l1'), (2, 'l2'), (3, 'l3')
+
+statement ok
+INSERT INTO r VALUES (1, 'r1'), (3, 'r3'), (4, 'r4')
+
+query ITIT rowsort
+SELECT * FROM l LEFT JOIN r ON l.la = r.ra
+----
+1  l1  1     r1
+2  l2  NULL  NULL
+3  l3  3     r3
+
+# This test may look the same as the last, but listing out the columns
+# explicitly checks for regressions of #1314.
+query ITIT rowsort
+SELECT l.la, l.lb, r.ra, r.rb FROM l LEFT JOIN r ON l.la = r.ra
+----
+1  l1  1     r1
+2  l2  NULL  NULL
+3  l3  3     r3
+
+query ITIT rowsort
+SELECT * FROM l RIGHT JOIN r ON l.la = r.ra
+----
+NULL  NULL  4  r4
+1     l1    1  r1
+3     l3    3  r3
+
+# This test may look the same as the last, but listing out the columns
+# explicitly checks for regressions of #1314.
+query ITIT rowsort
+SELECT l.la, l.lb, r.ra, r.rb FROM l RIGHT JOIN r ON l.la = r.ra
+----
+NULL  NULL  4  r4
+1     l1    1  r1
+3     l3    3  r3
+
+# Test that columns detected to be equivalent retain the names that the user
+# asks for. Protects against regression of #1217.
+query II colnames,rowsort
+SELECT ra, r.ra FROM l JOIN r ON l.la = r.ra LIMIT 0
+----
+ra  ra
+
+# Test that columns detected to be equivalent retain the names that the user
+# asks for. Protects against regression of #1217.
+query ITIT colnames,rowsort
+SELECT * FROM l JOIN r ON l.la = r.ra LIMIT 0
+----
+la  lb  ra  rb
+
+# Test that columns detected to be equivalent do not interfere with qualified
+# wildcard expansion. Protects against regression of #4477.
+query ITIT colnames
+SELECT l.*, r.* FROM l JOIN r ON l.la = r.ra LIMIT 0
+----
+la  lb  ra  rb
+
+# Like the last test, but with the equality reversed.
+query ITIT colnames
+SELECT l.*, r.* FROM l JOIN r ON r.ra = l.la LIMIT 0
+----
+la  lb  ra  rb
+
+# Test that projections work through join plans with scalars.
+query ITT rowsort
+SELECT l1.la, l2.lb, l3.lb
+FROM l as l1, l as l2, l as l3
+WHERE l1.la + 1 = l2.la AND l3.la = l1.la + l2.la
+----
+1  l2  l3
+
+# Test that join plans with scalars work in subqueries
+query IT rowsort
+SELECT l1.la, l1.lb
+FROM l as l1
+WHERE l1.la IN (
+    SELECT l2.la + 1
+    FROM l AS l2
+    WHERE l2.la IN (
+        SELECT l3.la + 1
+        FROM l as l3
+    )
+)
+----
+3  l3
+
+# Test that scalar expressions are introduced to join plans.
+query T multiline
+EXPLAIN PLAN FOR
+SELECT l1.la, l2.lb, l3.lb
+FROM l as l1, l as l2, l as l3
+WHERE l1.la + 1 = l2.la AND l3.la = l1.la + l2.la
+----
+%0 =
+| Get materialize.public.l (u1)
+| Filter !(isnull(#0))
+
+%1 =
+| Get materialize.public.l (u1)
+| Filter !(isnull(#0))
+| ArrangeBy (#0)
+
+%2 =
+| Get materialize.public.l (u1)
+| Filter !(isnull(#0))
+| ArrangeBy (#0)
+
+%3 =
+| Join %0 %1 %2 (= #2 (#0 + 1)) (= #4 (#0 + #2))
+| | implementation = Differential %0 %1.(#0) %2.(#0)
+| | demand = (#0, #3, #5)
+| Project (#0, #3, #5)
+
+EOF
+
+# Confirm that a +1 can exist in a subquery based join.
+# Note that the other +1 is found instead in a filter,
+# because subquery planning re-uses the relation it wraps.
+# It is perfectly acceptable for this plan to change, esp
+# if it improves (i.e. the cross join is removed).
+
+query T multiline
+EXPLAIN PLAN FOR
+SELECT l1.la, l1.lb
+FROM l as l1
+WHERE l1.la IN (
+    SELECT l2.la + 1
+    FROM l AS l2
+    WHERE l2.la IN (
+        SELECT l3.la + 1
+        FROM l as l3
+    )
+)
+----
+%0 =
+| Get materialize.public.l (u1)
+| Distinct group=(#0)
+| ArrangeBy ()
+
+%1 =
+| Get materialize.public.l (u1)
+
+%2 = Let l0 =
+| Join %0 %1
+| | implementation = Differential %1 %0.()
+| | demand = (#0, #1)
+
+%3 =
+| Get materialize.public.l (u1)
+
+%4 =
+| Get %2 (l0)
+| Filter !(isnull(#0)), ((#0 = (#1 + 1)) || (isnull(#0) && isnull(#1)))
+
+%5 =
+| Get %2 (l0)
+| Filter !(isnull(#1))
+| Distinct group=(#1)
+| ArrangeBy (#0)
+
+%6 =
+| Get materialize.public.l (u1)
+| Filter !(isnull(#0))
+
+%7 =
+| Join %5 %6 (= #0 (#1 + 1))
+| | implementation = Differential %6 %5.(#0)
+| | demand = (#0)
+| Distinct group=(#0)
+| ArrangeBy (#0)
+
+%8 =
+| Join %4 %7 (= #1 #3)
+| | implementation = Differential %4 %7.(#0)
+| | demand = (#0)
+| Distinct group=(#0)
+| ArrangeBy (#0)
+
+%9 =
+| Join %3 %8 (= #0 #2)
+| | implementation = Differential %3 %8.(#0)
+| | demand = (#0, #1)
+| Project (#0, #1)
+
+EOF
+
+# Test that multiplicities in outer joins are preserved.
+# Fixed in #2724.
+statement ok
+CREATE TABLE l2 (la int, lb text)
+
+statement ok
+CREATE TABLE r2 (ra int, rb text)
+
+statement ok
+INSERT INTO l2 VALUES (1, 'l1'), (2, 'l2'),  (2, 'l2'), (3, 'l3')
+
+statement ok
+INSERT INTO r2 VALUES (1, 'r1'), (3, 'r3'), (4, 'r4'), (4, 'r4')
+
+query ITIT rowsort
+SELECT * FROM l2 LEFT JOIN r2 ON l2.la = r2.ra
+----
+1  l1  1     r1
+2  l2  NULL  NULL
+2  l2  NULL  NULL
+3  l3  3     r3
+
+query ITIT rowsort
+SELECT * FROM l2 RIGHT JOIN r2 ON l2.la = r2.ra
+----
+NULL  NULL  4  r4
+NULL  NULL  4  r4
+1     l1    1  r1
+3     l3    3  r3
+
+
+# Test that outer joins work correctly in correlated subqueries (#3047)
+
+query IT rowsort
+SELECT * FROM l WHERE EXISTS (SELECT * from l as l2 LEFT JOIN r ON l.la = r.ra)
+----
+1  l1
+2  l2
+3  l3
+
+query IT rowsort
+SELECT * FROM r WHERE EXISTS (SELECT * from l RIGHT JOIN r as r2 ON l.la = r.ra)
+----
+4  r4
+1  r1
+3  r3
+
+# Regression test for #3426.
+query III colnames
+SELECT * FROM
+    (SELECT 1 AS baz) t1
+    INNER JOIN (
+        (SELECT 1 AS foo) t2
+        INNER JOIN (SELECT 1 AS bar) t3 ON true
+    ) ON foo = bar;
+----
+baz  foo  bar
+1    1    1
+
+# Test that join planning with constants does not panic due to missing arrangements.
+# This test could vanish if we conclude that this is just an anomalous defect is the
+# join planning, more than an interesting property to maintain.
+query ITIIII rowsort
+select * from
+    l2,
+    (values (1, 2), (2, 2)) as foo,
+    (values (2, 3), (3, 3)) as bar
+where
+    foo.column1 = bar.column1
+----
+1  l1  2  2  2  3
+2  l2  2  2  2  3
+2  l2  2  2  2  3
+3  l3  2  2  2  3
+
+# Test that joins with an `(= #x null)` constraint pass records, rather than drop them.
+query III rowsort
+SELECT * FROM
+    (((SELECT 1 FROM l2) LEFT JOIN
+    (SELECT 1 FROM r2) ON false) LEFT JOIN (SELECT 1 FROM r2) ON false);
+----
+1  NULL  NULL
+1  NULL  NULL
+1  NULL  NULL
+1  NULL  NULL
+
+# Regression test for #3914. The gist is that we want to exercise the
+# redundant join optimization on a join whose inputs contain projections. This
+# turns out to be extremely hard to accomplish because the projection lifting
+# optimization is very good at eliminating all but the top-level projection.
+# Having this test seems better than not, but it's fragile.
+statement ok
+CREATE VIEW gh3914 AS VALUES (NULL::int)
+
+query TTI
+SELECT * FROM (
+    (SELECT 'foo')
+    RIGHT JOIN (
+        (SELECT true) CROSS JOIN (SELECT 1 FROM gh3914 EXCEPT ALL (SELECT 456 WHERE false))
+    ) ON true
+)
+----
+foo  true  1
+
+
+# Test for outer join planning.
+query T multiline
+EXPLAIN PLAN FOR
+SELECT * FROM l LEFT JOIN r ON l.la = r.ra
+----
+%0 =
+| Get materialize.public.l (u1)
+| Filter !(isnull(#0))
+| ArrangeBy (#0)
+
+%1 =
+| Get materialize.public.r (u3)
+| Filter !(isnull(#0))
+
+%2 = Let l0 =
+| Join %0 %1 (= #0 #2)
+| | implementation = Differential %1 %0.(#0)
+| | demand = (#0, #1, #3)
+
+%3 =
+| Get materialize.public.l (u1)
+
+%4 =
+| Get %2 (l0)
+| Distinct group=(#0)
+| ArrangeBy (#0)
+
+%5 =
+| Join %3 %4 (= #0 #2)
+| | implementation = Differential %3 %4.(#0)
+| | demand = (#0, #1)
+| Negate
+| Project (#0, #1)
+
+%6 =
+| Get materialize.public.l (u1)
+
+%7 =
+| Union %5 %6
+| Map null, null
+
+%8 =
+| Get %2 (l0)
+| Project (#0, #1, #0, #3)
+
+%9 =
+| Union %7 %8
+
+EOF
+
+query T multiline
+EXPLAIN PLAN FOR
+SELECT * FROM l RIGHT JOIN r ON l.la = r.ra
+----
+%0 =
+| Get materialize.public.l (u1)
+| Filter !(isnull(#0))
+| ArrangeBy (#0)
+
+%1 =
+| Get materialize.public.r (u3)
+| Filter !(isnull(#0))
+
+%2 = Let l0 =
+| Join %0 %1 (= #0 #2)
+| | implementation = Differential %1 %0.(#0)
+| | demand = (#0, #1, #3)
+
+%3 =
+| Get materialize.public.r (u3)
+
+%4 =
+| Get %2 (l0)
+| Distinct group=(#0)
+| ArrangeBy (#0)
+
+%5 =
+| Join %3 %4 (= #0 #2)
+| | implementation = Differential %3 %4.(#0)
+| | demand = (#0, #1)
+| Negate
+| Project (#0, #1)
+
+%6 =
+| Get materialize.public.r (u3)
+
+%7 =
+| Union %5 %6
+| Map null, null
+| Project (#2, #3, #0, #1)
+
+%8 =
+| Get %2 (l0)
+| Project (#0, #1, #0, #3)
+
+%9 =
+| Union %7 %8
+
+EOF
+
+query T multiline
+EXPLAIN PLAN FOR
+SELECT * FROM l FULL JOIN r ON l.la = r.ra
+----
+%0 =
+| Get materialize.public.l (u1)
+| Filter !(isnull(#0))
+| ArrangeBy (#0)
+
+%1 =
+| Get materialize.public.r (u3)
+| Filter !(isnull(#0))
+
+%2 = Let l0 =
+| Join %0 %1 (= #0 #2)
+| | implementation = Differential %1 %0.(#0)
+| | demand = (#0, #1, #3)
+
+%3 = Let l1 =
+| Get %2 (l0)
+| Distinct group=(#0)
+
+%4 =
+| Get materialize.public.r (u3)
+
+%5 =
+| Get %3 (l1)
+| ArrangeBy (#0)
+
+%6 =
+| Join %4 %5 (= #0 #2)
+| | implementation = Differential %4 %5.(#0)
+| | demand = (#0, #1)
+| Negate
+| Project (#0, #1)
+
+%7 =
+| Get materialize.public.r (u3)
+
+%8 =
+| Union %6 %7
+| Map null, null
+| Project (#2, #3, #0, #1)
+
+%9 =
+| Get materialize.public.l (u1)
+
+%10 =
+| Get %3 (l1)
+| ArrangeBy (#0)
+
+%11 =
+| Join %9 %10 (= #0 #2)
+| | implementation = Differential %9 %10.(#0)
+| | demand = (#0, #1)
+| Negate
+| Project (#0, #1)
+
+%12 =
+| Get materialize.public.l (u1)
+
+%13 =
+| Union %11 %12
+| Map null, null
+
+%14 =
+| Get %2 (l0)
+| Project (#0, #1, #0, #3)
+
+%15 =
+| Union %8 %13 %14
+
+EOF
+
+query ITIT rowsort
+SELECT * FROM l INNER JOIN r ON mod(l.la, 2) = mod(r.ra, 2)
+----
+1 l1 1 r1
+1 l1 3 r3
+2 l2 4 r4
+3 l3 1 r1
+3 l3 3 r3
+
+# Test that when both keys are expressions, the join is not planned as a cross
+# join. Protects against regression of #4170.
+query T multiline
+EXPLAIN PLAN FOR SELECT * FROM l INNER JOIN r ON mod(l.la, 2) = mod(r.ra, 2)
+----
+%0 =
+| Get materialize.public.l (u1)
+| Filter !(isnull(#0))
+| ArrangeBy ((#0 % 2))
+
+%1 =
+| Get materialize.public.r (u3)
+| Filter !(isnull(#0))
+
+%2 =
+| Join %0 %1 (= (#0 % 2) (#2 % 2))
+| | implementation = Differential %1 %0.((#0 % 2))
+| | demand = (#0..#3)
+
+EOF
+
+# Regression test for #4361, in which inter-view predicate pushdown would cause
+# misoptimizations. Specifically, a predicate that was applied to only one use
+# of a view could be incorrectly applied to all uses of that view.
+#
+# Inter-view (mis-)optimizations don't appear in the output of EXPLAIN, so we
+# have to test this rather obliquely.
+
+statement ok
+CREATE TABLE t4362 (name text NOT NULL, id int NOT NULL)
+
+statement ok
+INSERT INTO t4362 VALUES ('a', 1), ('a', 2), ('b', 3)
+
+statement ok
+CREATE VIEW v4362 AS SELECT name, id FROM t4362
+
+query TT
+SELECT name, id FROM v4362 WHERE name = 'a'
+----
+a 1
+a 2
+
+query TT
+SELECT name, id FROM v4362 WHERE name = (SELECT name FROM v4362 WHERE id = 1)
+----
+a 1
+a 2
+
+mode standard
+
+# At the time of writing, for this test to properly validate inter-view
+# optimization correctness, exactly one of the `Get materialize.public.v4362`
+# nodes must be followed a `Filter` node. If that is not the case in the plan
+# below, likely the test is no longer testing for the bug.
+
+query T multiline
+EXPLAIN SELECT name, id FROM v4362 WHERE name = (SELECT name FROM v4362 WHERE id = 1)
+----
+%0 =
+| Get materialize.public.v4362 (u12)
+| ArrangeBy (#0)
+
+%1 =
+| Get materialize.public.v4362 (u12)
+| Filter (#1 = 1)
+
+%2 =
+| Join %0 %1 (= #0 #2)
+| | implementation = Differential %1 %0.(#0)
+| | demand = (#0, #1)
+| Project (#0, #1)
+
+EOF
+
+mode cockroach
+
+# Test implicitly coercible USING columns
+statement ok
+CREATE TABLE big_l (la int8, lb text)
+
+statement ok
+INSERT INTO big_l VALUES (1, 'big_l1'), (3, 'bigl_3'), (5, 'bigl_5')
+
+query ITT
+SELECT la, l.lb, big_l.lb FROM l JOIN big_l USING (la)
+----
+1  l1  big_l1
+3  l3  bigl_3
+
+query T multiline
+EXPLAIN RAW PLAN FOR SELECT la, l.lb, big_l.lb FROM l JOIN big_l USING (la)
+----
+%0 =
+| Get materialize.public.l (u1)
+
+%1 =
+| Get materialize.public.big_l (u13)
+
+%2 =
+| InnerJoin %0 %1 on (true && (i32toi64(#0) = #2))
+| Map coalesce(i32toi64(#0), #2)
+| Project (#4, #1, #3)
+
+EOF
+
+statement ok
+CREATE TABLE join_fail (la date);
+
+query error NATURAL/USING join column "la" cannot be cast to uniform type: integer vs date
+SELECT la FROM l JOIN join_fail USING (la)

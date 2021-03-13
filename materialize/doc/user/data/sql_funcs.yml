@@ -1,0 +1,494 @@
+- type: Generic
+  description: Generic functions can typically take arguments of any type.
+  functions:
+  - signature: CAST (cast_expr) -> T
+    description: Value as type `T`
+    url: cast
+
+  - signature: 'coalesce(x: T...) -> T?'
+    description: First non-_NULL_ arg, or _NULL_ if all are _NULL_
+
+  - signature: 'nullif(x: T, y: T) -> T?'
+    description: _NULL_ if `x == y`, else `x`
+
+- type: Aggregate
+  description: Aggregate functions take one or more of the same element type as arguments.
+  functions:
+  - signature: 'avg(x: T) -> U'
+    description: Average of `T`'s values.
+      <br><br>
+      Returns `numeric` if `x` is `int`, `double` if `x` is `real`, else returns
+      same type as `x`.
+
+  - signature: 'count(x: T) -> int'
+    description: Number of non-_NULL_ inputs.
+
+  - signature: jsonb_agg(expression) -> jsonb
+    description: Aggregate values (including nulls) as a jsonb array.
+    url: jsonb_agg
+
+  - signature: 'max(x: T) -> T'
+    description: Maximum value among `T`
+
+  - signature: 'min(x: T) -> T'
+    description: Minimum value among `T`
+
+  - signature: 'stddev(x: T) -> U'
+    description: Historical alias for `stddev_samp`. *(imprecise)*
+      <br><br>
+      Returns `numeric` if `x` is `int`, `double` if `x` is `real`, else returns
+      same type as `x`.
+
+  - signature: 'stddev_pop(x: T) -> U'
+    description: Population standard deviation of `T`'s values. *(imprecise)*
+      <br><br>
+      Returns `numeric` if `x` is `int`, `double` if `x` is `real`, else returns
+      same type as `x`.
+
+  - signature: 'stddev_samp(x: T) -> U'
+    description: Sample standard deviation of `T`'s values. *(imprecise)*
+      <br><br>
+      Returns `numeric` if `x` is `int`, `double` if `x` is `real`, else returns
+      same type as `x`.
+
+  - signature: 'sum(x: T) -> U'
+    description: Sum of `T`'s values
+      <br><br>
+      Returns `bigint` if `x` is `int`, `numeric` if `x` is `bigint`, else returns
+      same type as `x`.
+
+  - signature: 'variance(x: T) -> U'
+    description: Historical alias for `variance_samp`. *(imprecise)*
+      <br><br>
+      Returns `numeric` if `x` is `int`, `double` if `x` is `real`, else returns
+      same type as `x`.
+  - signature: 'variance_pop(x: T) -> U'
+    description: Population variance of `T`'s values. *(imprecise)*
+      <br><br>
+      Returns `numeric` if `x` is `int`, `double` if `x` is `real`, else returns
+      same type as `x`.
+  - signature: 'variance_samp(x: T) -> U'
+    description: Sample variance of `T`'s values. *(imprecise)*
+      <br><br>
+      Returns `numeric` if `x` is `int`, `double` if `x` is `real`, else returns
+      same type as `x`.
+
+- type: List
+  description: List functions take [`list`](../types/list) arguments, and are [polymorphic](../types/list/#polymorphism).
+  functions:
+    - signature: 'list_append(l: listany, e: listelementany) -> L'
+      description: Appends `e` to `l`.
+
+    - signature: 'list_cat(l1: listany, l2: listany) -> L'
+      description: Concatenates `l1` and `l2`.
+
+    - signature: 'list_ndims(l: listany) -> int'
+      description: '[Experimental](/cli/#experimental-mode)––Returns the number of dimensions on `l`.'
+
+    - signature: 'list_length(l: listany) -> int'
+      description: Return the number of elements in `l`.
+
+    - signature: 'list_length_max(l: listany, d: int) -> int'
+      description: '[Experimental](/cli/#experimental-mode)––Return the greatest length among all lists on dimension `d` of `l`.'
+
+    - signature: 'list_prepend(e: listelementany, l: listany) -> listany'
+      description: Prepends `e` to `l`.
+
+- type: Numbers
+  description: Number functions take number-like arguments, e.g. [`int`](../types/int),
+    [`float`](../types/float), [`numeric`](../types/numeric), unless otherwise specified.
+  functions:
+  - signature: 'abs(x: N) -> N'
+    description: The absolute value of `x`
+
+  - signature: 'cbrt(x: double precision) -> double precision'
+    description: The cube root of `x`.
+
+  - signature: 'ceil(x: N) -> N'
+    description: The largest integer >= `x`
+
+  - signature: 'exp(x: N) -> N'
+    description: Exponential of `x` (e raised to the given power)
+
+  - signature: 'floor(x: N) -> N'
+    description: The largest integer <= `x`
+
+  - signature: 'ln(x: double precision) -> double precision'
+    description: Natural logarithm of `x`
+
+  - signature: 'ln(x: numeric) -> numeric'
+    description: Natural logarithm of `x`
+
+  - signature: 'log(x: double precision) -> double precision'
+    description: Base 10 logarithm of `x`
+
+  - signature: 'log(x: numeric) -> numeric'
+    description: Base 10 logarithm of `x`
+
+  - signature: 'log10(x: double precision) -> double precision'
+    description: Base 10 logarithm of `x`, same as `log`
+
+  - signature: 'log10(x: numeric) -> numeric'
+    description: Base 10 logarithm of `x`, same as `log`
+
+  - signature: 'log(x: numeric, b: numeric) -> numeric'
+    description: Base `b` logarithm of `x`
+
+  - signature: 'mod(x: N, y: N) -> N'
+    description: "`x % y`"
+
+  - signature: 'power(x: double precision, y: double precision) -> double precision'
+    description: "`x` raised to the power of `y`"
+
+  - signature: 'power(x: numeric, y: numeric) -> numeric'
+    description: "`x` raised to the power of `y`"
+
+  - signature: 'round(x: N) -> N'
+    description: >-
+      `x` rounded to the nearest whole number.
+      If `N` is `real` or `double precision`, rounds ties to the nearest even number.
+      If `N` is `numeric`, rounds ties away from zero.
+
+  - signature: 'round(x: numeric, y: int) -> numeric'
+    description: "`x` rounded to `y` decimal places, while retaining the same
+      [`numeric`](../types/numeric) scale; rounds ties away from zero."
+
+  - signature: 'sqrt(x: numeric) -> numeric'
+    description: The square root of `x`.
+
+  - signature: 'sqrt(x: double precision) -> double precision'
+    description: The square root of `x`.
+
+- type: Trigonometric
+  description: Trigonometric functions take and return `double precision` values.
+  functions:
+  - signature: 'cos(x: double precision) -> double precision'
+    description: The cosine of `x`, with `x` in radians.
+
+  - signature: 'cosh(x: double precision) -> double precision'
+    description: The hyperbolic cosine of `x`, with `x` as a hyperbolic angle.
+
+  - signature: 'cot(x: double precision) -> double precision'
+    description: The cotangent of `x`, with `x` in radians.
+
+  - signature: 'sin(x: double precision) -> double precision'
+    description: The sine of `x`, with `x` in radians.
+
+  - signature: 'sinh(x: double precision) -> double precision'
+    description: The hyperbolic sine of `x`, with `x` as a hyperbolic angle.
+
+  - signature: 'tan(x: double precision) -> double precision'
+    description: The tangent of `x`, with `x` in radians.
+
+  - signature: 'tanh(x: double precision) -> double precision'
+    description: The hyperbolic tangent of `x`, with `x` as a hyperbolic angle.
+
+- type: String
+  functions:
+  - signature: 'ascii(s: str) -> int'
+    description: The ASCII value of `s`'s left-most character
+
+  - signature: 'btrim(s: str) -> str'
+    description: Trim all spaces from both sides of `s`.
+
+  - signature: 'btrim(s: str, c: str) -> str'
+    description: Trim any character in `c` from both sides of `s`.
+
+  - signature: 'bit_length(s: str) -> int'
+    description: Number of bits in `s`
+
+  - signature: 'bit_length(b: bytea) -> int'
+    description: Number of bits in `b`
+
+  - signature: 'char_length(s: str) -> int'
+    description: Number of code points in `s`
+
+  - signature: 'decode(s: text, format: text) -> bytea'
+    description: Decode `s` using the specified textual representation.
+    url: encode
+
+  - signature: 'encode(b: bytea, format: text) -> text'
+    description: Encode `b` using the specified textual representation.
+    url: encode
+
+  - signature: 'length(s: str) -> int'
+    description: Number of code points in `s`
+    url: length
+
+  - signature: 'length(b: bytea) -> int'
+    description: Number of bytes in `s`
+    url: length
+
+  - signature: 'length(s: bytea, encoding_name: str) -> int'
+    description: Number of code points in `s` after encoding
+    url: length
+
+  - signature: 'lower(s: str) -> str'
+    description: Convert `s` to lowercase.
+
+  - signature: 'lpad(s: str, len: int) -> str'
+    description: "Prepend `s` with spaces up to length `len`,
+      or right truncate if `len` is less than the length of `s`."
+
+  - signature: 'lpad(s: str, len: int, p: str) -> str'
+    description: "Prepend `s` with characters pulled from `p` up to length `len`,
+      or right truncate if `len` is less than the length of `s`."
+
+  - signature: 'ltrim(s: str) -> str'
+    description: Trim all spaces from the left side of `s`.
+
+  - signature: 'ltrim(s: str, c: str) -> str'
+    description: Trim any character in `c` from the left side of `s`.
+
+  - signature: 'octet_length(s: str) -> int'
+    description: Number of bytes in `s`
+
+  - signature: 'octet_length(b: bytea) -> int'
+    description: Number of bytes in `b`
+
+  - signature: 'regexp_match(haystack: str, needle: str [, flags: str]]) -> str[]'
+    description: >-
+      Matches the regular expression `needle` against haystack, returning a
+      string array that contains the value of each capture group specified in
+      `needle`, in order. If `flags` is set to the string `i` matches
+      case-insensitively.
+
+  - signature: 'replace(s: str, f: str, r: str) -> str'
+    description: "`s` with all instances of `f` replaced with `r`"
+
+  - signature: 'rtrim(s: str) -> str'
+    description: Trim all spaces from the right side of `s`.
+
+  - signature: 'rtrim(s: str, c: str) -> str'
+    description: Trim any character in `c` from the right side of `s`.
+
+  - signature: 'split_part(s: str, d: s, i: int) -> str'
+    description: Split `s` on delimiter `d`. Return the `str` at index `i`, counting from 1.
+
+  - signature: 'substring(s: str, start_pos: int) -> str'
+    description: Substring of `s` starting at `start_pos`
+    url: substring
+
+  - signature: 'substring(s: str, start_pos: int, l: int) -> str'
+    description: Substring starting at `start_pos` of length `l`
+    url: substring
+
+  - signature: "trim([BOTH | LEADING | TRAILING]? 'c'? FROM 's') -> str"
+    description: "Trims any character in `c` from `s` on the specified side.<br/><br/>Defaults:<br/>
+      &bull; Side: `BOTH`<br/>
+      &bull; `'c'`: `' '` (space)"
+
+  - signature: 'upper(s: str) -> str'
+    description: Convert `s` to uppercase.
+
+- type: Scalar
+  description: Scalar functions take a list of scalar expressions
+  functions:
+  - signature: 'expression bool_op ALL(s: Scalars) -> bool'
+    description: "`true` if applying [bool_op](#boolean) to `expression` and every
+      value of `s` evaluates to `true`"
+
+  - signature: 'expression bool_op ANY(s: Scalars) -> bool'
+    description: "`true` if applying [bool_op](#boolean) to `expression` and any value
+      of `s` evaluates to `true`"
+
+  - signature: 'expression IN(s: Scalars) -> bool'
+    description: "`true` for each value in `expression` if it matches at least one
+      element of `s`"
+
+  - signature: 'expression NOT IN(s: Scalars) -> bool'
+    description: "`true` for each value in `expression` if it does not match any elements
+      of `s`"
+
+  - signature: 'expression bool_op SOME(s: Scalars) -> bool'
+    description: "`true` if applying [bool_op](#boolean) to `expression` and any value
+      of `s` evaluates to `true`"
+
+- type: Subquery
+  description: Subquery functions take a query, e.g. [`SELECT`](/sql/select)
+  functions:
+  - signature: 'expression bool_op ALL(s: Query) -> bool'
+    description: "`s` must return exactly one column; `true` if applying [bool_op](#boolean)
+      to `expression` and every value of `s` evaluates to `true`"
+
+  - signature: 'expression bool_op ANY(s: Query) -> bool'
+    description: "`s` must return exactly one column; `true` if applying [bool_op](#boolean)
+      to `expression` and any value of `s` evaluates to `true`"
+  - signature: 'EXISTS(s: Query) -> bool'
+    description: "`true` if `s` returns at least one row"
+
+  - signature: 'expression IN(s: Query) -> bool'
+    description: "`s` must return exactly one column; `true` for each value in `expression`
+      if it matches at least one element of `s`"
+
+  - signature: 'NOT EXISTS(s: Query) -> bool'
+    description: "`true` if `s` returns zero rows"
+
+  - signature: 'expression NOT IN(s: Query) -> bool'
+    description: "`s` must return exactly one column; `true` for each value in `expression`
+      if it does not match any elements of `s`"
+
+  - signature: 'expression bool_op SOME(s: Query) -> bool'
+    description: "`s` must return exactly one column; `true` if applying [bool_op](#boolean)
+      to `expression` and any value of `s` evaluates to `true`"
+
+- type: Date and Time
+  description: Time functions take or produce a time-like type, e.g. [`date`](../types/date),
+    [`timestamp`](../types/timestamp), [`timestamp with time zone`](../types/timestamptz).
+  functions:
+  - signature: current_timestamp() -> timestamptz
+    description: 'The `timestamp with time zone` representing when the query was executed.<br/><br/>**NOTE**:
+      Users cannot define views with queries containing `current_timestamp()`.'
+
+  - signature: 'date_trunc(time_component: str, val: timestamp) -> timestamp'
+    description: Largest `time_component` <= `val`
+    url: date-trunc
+
+  - signature: EXTRACT(extract_expr) -> float
+    description: Specified time component from value
+    url: extract
+
+  - signature: mz_logical_timestamp() -> numeric
+    description: 'The logical time at which a query executes.<br/><br/>**NOTE**: Users
+      cannot define views with queries containing `mz_logical_timestamp()`.'
+
+  - signature: now() -> timestamptz
+    description: 'The `timestamp with time zone` representing when the query was executed.<br/><br/>**NOTE**:
+      Users cannot define views with queries containing `now()`.'
+
+  - signature: 'to_timestamp(val: double precision) -> timestamptz'
+    description: Converts Unix epoch (seconds since 00:00:00 UTC on January 1, 1970)
+      to timestamp
+
+  - signature: 'to_char(val: timestamp, format: str)'
+    description: Converts a timestamp into a string using the specified format.
+    url: to_char
+
+- type: UUID
+  functions:
+  - signature: mz_cluster_id() -> uuid
+    description: The `uuid` uniquely identifying this Materialize cluster.
+
+- type: JSON
+  functions:
+  - signature: 'jsonb_array_elements(j: jsonb) -> Col<jsonb>'
+    description: "`j`'s elements if `j` is an array."
+    url: "/docs/sql/types/jsonb/#jsonb_array_elements"
+
+  - signature: 'jsonb_array_elements_text(j: jsonb) -> Col<string>'
+    description: "`j`'s elements if `j` is an array."
+    url: "/docs/sql/types/jsonb/#jsonb_array_elements_text"
+
+  - signature: 'jsonb_array_length(j: jsonb) -> int'
+    description: Number of elements in `j`'s outermost array.
+    url: "/docs/sql/types/jsonb/#jsonb_array_length"
+
+  - signature: 'jsonb_build_array(x: ...) -> jsonb'
+    description: The elements of `x` in a `jsonb` array. Elements can be of heterogenous
+      types.
+    url: "/docs/sql/types/jsonb/#jsonb_build_array"
+
+  - signature: 'jsonb_build_object(x: ...) -> jsonb'
+    description: The elements of x as a `jsonb` object. The argument list alternates
+      between keys and values.
+    url: "/docs/sql/types/jsonb/#jsonb_build_object"
+
+  - signature: 'jsonb_each(j: jsonb) -> Col<(key: string, value: jsonb)>'
+    description: "`j`'s outermost elements if `j` is an object."
+    url: "/docs/sql/types/jsonb/#jsonb_each"
+
+  - signature: 'jsonb_each_text(j: jsonb) -> Col<(key: string, value: string)>'
+    description: "`j`'s outermost elements if `j` is an object."
+    url: "/docs/sql/types/jsonb/#jsonb_each_text"
+
+  - signature: 'jsonb_object_keys(j: jsonb) -> Col<string>'
+    description: "`j`'s outermost keys if `j` is an object."
+    url: "/docs/sql/types/jsonb/#jsonb_object_keys"
+
+  - signature: 'jsonb_pretty(j: jsonb) -> string'
+    description: Pretty printed (i.e. indented) `j`.
+    url: "/docs/sql/types/jsonb/#jsonb_pretty"
+
+  - signature: 'jsonb_typeof(j: jsonb) -> string'
+    description: Type of `j`'s outermost value. One of `object`, `array`, `string`,
+      `number`, `boolean`, and `null`.
+    url: "/docs/sql/types/jsonb/#jsonb_typeof"
+
+  - signature: 'jsonb_strip_nulls(j: jsonb) -> jsonb'
+    description: "`j` with all object fields with a value of `null` removed. Other
+      `null` values remain."
+    url: "/docs/sql/types/jsonb/#jsonb_strip_nulls"
+
+  - signature: 'to_jsonb(v: T) -> jsonb'
+    description: "`v` as `jsonb`"
+    url: "/docs/sql/types/jsonb/#to_jsonb"
+
+- type: Table
+  description: Table functions evaluate to a set of rows, rather than a single expression.
+  functions:
+  - signature: 'generate_series(start: int, stop: int) -> Col<int>'
+    description: Generate all integer values between `start` and `stop`, inclusive.
+  - signature: 'regexp_extract(regex: str, haystack: str) -> Col<string>'
+    description: Values of the capture groups of `regex` as matched in `haystack`
+
+- type: Array
+  functions:
+  - signature: 'array_to_string(a: anyarray, sep: text [, ifnull: text]) -> text'
+    description: >-
+      Concatenates the elements of `array` together separated by `sep`.
+      Null elements are omitted unless `ifnull` is non-null, in which case
+      null elements are replaced with the value of `ifnull`.
+
+- type: Cryptography
+  functions:
+    - signature: 'digest(data: text, type: text) -> bytea'
+      description: >-
+        Computes a binary hash of the given text `data` using the specified `type` algorithm.
+        Supported hash algorithms are: `md5`, `sha1`, `sha224`, `sha256`, `sha384`, and `sha512`.
+    - signature: 'digest(data: bytea, type: text) -> bytea'
+      description: >-
+        Computes a binary hash of the given bytea `data` using the specified `type` algorithm.
+        The supported hash algorithms are the same as for the text variant of this function.
+    - signature: 'hmac(data: text, key: text, type: text) -> bytea'
+      description: >-
+        Computes a hashed MAC of the given text `data` using the specified `key` and
+        `type` algorithm. Supported hash algorithms are the same as for `digest`.
+    - signature: 'hmac(data: bytea, key: bytea, type: text) -> bytea'
+      description: >-
+        Computes a hashed MAC of the given bytea `data` using the specified `key` and
+        `type` algorithm. The supported hash algorithms are the same as for `digest`.
+
+- type: System information
+  description: Functions that return information about the system
+  functions:
+  - signature: 'mz_version() -> text'
+    description: Returns the server's version information as a human-readable string.
+  - signature: 'format_type(oid: int, typemod: int) -> text'
+    description: Returns the canonical SQL name for the type specified by `oid` with `typemod` applied.
+  - signature: 'current_user() -> text'
+    description: >-
+      Returns the name of the user who executed the containing query.
+      At the moment this is always `materialize`.
+
+- type: PostgreSQL compatibility
+  description: Functions whose primary purpose is to facilitate compatibility with PostgreSQL tools
+  functions:
+  - signature: 'current_schema() -> text'
+    description: >-
+      Returns the name of the first non-implicit schema on the search path, or
+      `NULL` if the search path is empty.
+  - signature: 'current_schemas(include_implicit: bool) -> text[]'
+    description: >-
+      Returns the names of the schemas on the search path.
+      The `include_implicit` parameter controls whether implicit schemas like
+      `mz_catalog` and `pg_catalog` are included in the output.
+  - signature: 'obj_description(oid: oid, catalog: text) -> text'
+    description: PostgreSQL compatibility shim. Currently always returns `NULL`.
+  - signature: 'pg_table_is_visible(relation: oid) -> boolean'
+    description: Reports whether the relation with the specified OID is visible in the search path.
+  - signature: 'pg_typeof(expr: any) -> text'
+    description: Returns the type of its input argument as a string.
+  - signature: 'pg_encoding_to_char(encoding_id: integer) -> text'
+    description: PostgreSQL compatibility shim. Not intended for direct use.
+  - signature: 'version() -> text'
+    description: Returns a PostgreSQL-compatible version string.
