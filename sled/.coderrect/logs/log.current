@@ -1,0 +1,2 @@
+20:01:42 [info] [reporter] [main.go:788:main.main] Check the cmdlineenv. cmdlineEnv=    
+20:01:42 [error] [reporter] [main.go:797:main.main] Fail to read index.json. indexjson=/home/skeet/Documents/o2_lab/rust/racedetect_testing/sled/.report/index.json, err=open /home/skeet/Documents/o2_lab/rust/racedetect_testing/sled/.report/index.json: no such file or directory    
